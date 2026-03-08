@@ -1,4 +1,4 @@
-"""Rewriter runner — transforms tool descriptions for LLM-optimized selection."""
+"""Rewriter runner -- transforms tool descriptions for LLM-optimized selection."""
 
 from __future__ import annotations
 
@@ -134,7 +134,7 @@ def _rewrite_local(tool: dict, all_tools: list[dict]) -> str:
     first_word = name_lower.split("_")[0] if "_" in name_lower else name_lower
     verb = VERB_MAP.get(first_word, desc.split()[0] if desc else "Perform")
 
-    # Clean up original description — strip any leading verb so we don't double-prefix
+    # Clean up original description -- strip any leading verb so we don't double-prefix
     clean_desc = desc.strip().rstrip(".")
     # Remove leading adverb + verb phrase (e.g. "Recursively search for..." -> "for files...")
     leading_verb = re.match(

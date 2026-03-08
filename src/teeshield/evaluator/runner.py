@@ -1,4 +1,4 @@
-"""Evaluator runner — compare tool selection accuracy before/after improvements."""
+"""Evaluator runner -- compare tool selection accuracy before/after improvements."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""TeeShield CLI — four core commands."""
+"""TeeShield CLI -- four core commands."""
 
 import click
 from rich.console import Console

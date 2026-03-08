@@ -1,4 +1,4 @@
-"""Scanner runner — orchestrates all scan stages."""
+"""Scanner runner -- orchestrates all scan stages."""
 
 from __future__ import annotations
 

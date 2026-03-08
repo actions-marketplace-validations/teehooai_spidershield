@@ -10,11 +10,11 @@ from pydantic import BaseModel, Field
 class Rating(str, Enum):
     """Certification rating levels."""
 
-    F = "F"  # Flagged — known security issues
-    C = "C"  # Community — unaudited
-    B = "B"  # Basic — passed automated scan
-    A = "A"  # Audited — full audit including manual review
-    A_PLUS = "A+"  # Enterprise Certified — continuous monitoring
+    F = "F"  # Flagged --known security issues
+    C = "C"  # Community --unaudited
+    B = "B"  # Basic --passed automated scan
+    A = "A"  # Audited --full audit including manual review
+    A_PLUS = "A+"  # Enterprise Certified --continuous monitoring
 
 
 class SecurityIssue(BaseModel):
