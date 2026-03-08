@@ -51,6 +51,36 @@ TeeShield uses evidence-driven evolution (see docs/observations/001-audit-qualit
 - A server with all quality signals should score 8-10/10
 - Security score 10.0 means zero issues found, not "secure" (we can't prove absence)
 
+## PR Campaign Quality Gates (G1 -- must pass before submitting any PR)
+
+Before submitting a PR to any external MCP repo, ALL 5 gates must pass:
+
+1. **Real problem**: The original description has a concrete, demonstrable issue
+   (ambiguous scope, missing side-effects, misleading trigger). Not "could be better".
+2. **Narrower and more precise**: The rewrite must be semantically narrower or more
+   specific than the original. Never broaden scope.
+3. **Preserves command semantics**: The rewrite must not change what the tool actually does.
+   `git fetch` fetches from git remotes, not URLs. `git add` stages files, not "appends".
+4. **One-sentence justification**: If you cannot explain the change in one sentence,
+   the change is not high-confidence enough for an automated PR.
+5. **Tests must pass**: If the target repo has CI, the PR must not break it.
+   Description-only changes should never break tests.
+
+### PR Strategy by Repo Type
+
+| Type | Stars | Action | Example |
+|------|-------|--------|---------|
+| A: Small active | < 1k | Direct PR | HenkDz/postgresql-mcp-server |
+| B: Large/strict | > 1k | Issue first, PR if invited | modelcontextprotocol/servers |
+| C: Corporate | any | Issue only | playwright-mcp, github-mcp |
+
+### PR Anti-Patterns (learned from rejected PRs)
+
+- **Tautological triggers**: "Opens a file. Use when user wants to open a file." (rejected by ida-pro-mcp #277)
+- **Semantic mismatches**: git "fetch" matched to URL "fetch", git "add" matched to "append" (flagged on git-mcp-server #42)
+- **Template boilerplate**: Generic error guidance unrelated to the tool's domain
+- **Too many changes**: Large PRs scare maintainers. Keep to 1-5 tool descriptions per PR.
+
 ## Development Standards
 
 - Python 3.11+ with type hints on all new functions
