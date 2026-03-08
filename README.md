@@ -89,7 +89,7 @@ The rewriter works offline using templates (zero cost). Set `ANTHROPIC_API_KEY` 
 | fetch | 1 | 9.0 | 3.5 | 7.3 | B |
 | supabase | 30 | 9.0 | 2.3 | 6.4 | B |
 
-Full report: [CURATION-REPORT.md](CURATION-REPORT.md)
+Full report: [MCP-SECURITY-REPORT.md](MCP-SECURITY-REPORT.md) | Raw data: [CURATION-REPORT.md](CURATION-REPORT.md)
 
 ## Try it on an example
 
