@@ -112,13 +112,34 @@ def _infer_category(name: str, desc: str) -> str:
 
 def _find_similar_tools(name: str, all_tools: list[dict]) -> list[str]:
     """Find tools with similar names for disambiguation."""
-    name_words = set(name.lower().replace("_", " ").split())
+    name_words = set(name.lower().replace("_", " ").replace("-", " ").split())
+
+    # Compute common prefix words shared by most tools (e.g., "git", "kubectl")
+    # These are too generic for disambiguation
+    all_word_sets = [
+        set(t["name"].lower().replace("_", " ").replace("-", " ").split())
+        for t in all_tools
+    ]
+    if len(all_word_sets) >= 3:
+        from collections import Counter
+        word_freq = Counter(w for ws in all_word_sets for w in ws)
+        threshold = len(all_tools) * 0.5
+        common_words = {w for w, c in word_freq.items() if c >= threshold}
+    else:
+        common_words = set()
+
+    # Only consider non-common words for overlap
+    meaningful_words = name_words - common_words
+    if not meaningful_words:
+        return []
+
     similar = []
     for t in all_tools:
         if t["name"] == name:
             continue
-        other_words = set(t["name"].lower().replace("_", " ").split())
-        overlap = name_words & other_words
+        other_words = set(t["name"].lower().replace("_", " ").replace("-", " ").split())
+        other_meaningful = other_words - common_words
+        overlap = meaningful_words & other_meaningful
         if overlap:
             similar.append(t["name"])
     return similar
