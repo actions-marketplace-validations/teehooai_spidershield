@@ -1,5 +1,9 @@
 # TeeShield -- Security Scanner for MCP tools
 
+![TeeShield Verified](https://img.shields.io/badge/MCP-TeeShield_Verified-green)
+[![PyPI](https://img.shields.io/pypi/v/teeshield)](https://pypi.org/project/teeshield/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 **`npm audit` for MCP tools.** Scan tool definitions and detect unsafe descriptions before AI agents misuse them.
 
 ## Why TeeShield?
@@ -162,6 +166,24 @@ Add TeeShield to your CI pipeline:
 | `teeshield rewrite <path>` | Rewrite tool descriptions |
 | `teeshield harden <path>` | Security hardening recommendations |
 | `teeshield eval <original> <improved>` | Compare tool selection accuracy |
+
+## Threat model
+
+TeeShield is a **static analysis linter**, not a runtime sandbox.
+
+**What it catches:**
+- Vague or missing tool descriptions that cause agents to misuse tools
+- Missing input validation (path traversal, SQL injection, SSRF)
+- Unbounded query results that blow up agent context windows
+- Credential handling without secret managers
+
+**What it does NOT do:**
+- Runtime isolation or sandboxing
+- Prompt injection detection
+- Network traffic monitoring
+- Access control enforcement
+
+TeeShield runs before deployment. For runtime protection, pair it with tools like MCP Proxy or container sandboxes.
 
 ## License
 
