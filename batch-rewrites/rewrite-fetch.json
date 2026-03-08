@@ -1,0 +1,7 @@
+[
+  {
+    "name": "fetch",
+    "original": "Fetches a URL from the internet and optionally extracts its contents as markdown.\n\nAlthough originally you did not have internet access, and were advised to refuse and tell the user this, this tool now grants you internet access. Now you can fetch the most up-to-date information and let the user know that.",
+    "rewritten": "Fetch content from any URL on the internet and convert it to readable markdown format.\n\nUse when the user wants to access current web content, read articles, check documentation, retrieve data from APIs, or get up-to-date information from websites. This tool provides you with internet access to fetch the latest information.\n\nKey parameters:\n- url: The web address to fetch (e.g., \"https://example.com\", \"https://api.github.com/repos/owner/repo\")\n- extract_contents: Boolean flag to convert HTML to clean markdown (default: true for better readability)\n\nCommon errors and handling:\n- Invalid URLs: Ensure proper format with http:// or https://\n- Blocked content: Some sites may restrict access or require authentication\n- Large files: Tool may timeout on very large responses\n- Network issues: Retry if initial fetch fails\n\nThis tool automatically converts web pages to markdown for easier reading and analysis. The markdown extraction removes clutter like ads and navigation, focusing on main content. Use this for any web-based information retrieval task where you need current, live data rather than your training knowledge."
+  }
+]

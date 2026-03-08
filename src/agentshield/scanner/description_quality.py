@@ -79,9 +79,11 @@ def _extract_tools(path: Path) -> list[dict]:
     """Extract tool definitions from Python or TypeScript MCP server code."""
     tools: list[dict] = []
 
+    skip_dirs = {"node_modules", "__pycache__", ".venv", "venv", ".git", "dist", "build", ".tox", ".mypy_cache"}
+
     # Python: look for @tool or @server.tool decorators
     for py_file in path.rglob("*.py"):
-        if "node_modules" in str(py_file) or "__pycache__" in str(py_file):
+        if any(part in skip_dirs for part in py_file.parts):
             continue
         try:
             content = py_file.read_text(errors="ignore")
@@ -135,7 +137,7 @@ def _extract_tools(path: Path) -> list[dict]:
 
     # TypeScript: look for server.tool() or server.registerTool() calls
     for ts_file in list(path.rglob("*.ts")) + list(path.rglob("*.js")):
-        if "node_modules" in str(ts_file):
+        if any(part in skip_dirs for part in ts_file.parts):
             continue
         try:
             content = ts_file.read_text(errors="ignore")

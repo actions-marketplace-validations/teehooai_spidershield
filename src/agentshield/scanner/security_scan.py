@@ -85,7 +85,7 @@ def scan_security(path: Path) -> tuple[float, list[SecurityIssue]]:
 
     source_files = list(path.rglob("*.py")) + list(path.rglob("*.ts")) + list(path.rglob("*.js"))
     # Exclude non-source directories from security scanning
-    exclude_dirs = {"node_modules", "__pycache__", "__tests__", "tests", "test", ".git", "dist", "build"}
+    exclude_dirs = {"node_modules", "__pycache__", "__tests__", "tests", "test", ".git", "dist", "build", ".venv", "venv", ".tox", ".mypy_cache"}
     source_files = [
         f for f in source_files
         if not any(part in exclude_dirs for part in f.parts)
