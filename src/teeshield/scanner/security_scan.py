@@ -21,9 +21,14 @@ DANGEROUS_PATTERNS = {
     },
     "command_injection": {
         "patterns": [
-            r"os\.system\(",
-            r"os\.popen\(",
-            r"subprocess\.(?:call|run|Popen)\([^)]*shell\s*=\s*True",
+            # os.system() with variable (not just string literal)
+            r"os\.system\(\s*(?![\"'])",
+            r"os\.system\(\s*f[\"']",
+            r"os\.popen\(\s*(?![\"'])",
+            r"os\.popen\(\s*f[\"']",
+            # shell=True with variable/f-string command (not hardcoded)
+            r"subprocess\.(?:call|run|Popen)\(\s*f[\"'].*shell\s*=\s*True",
+            r"subprocess\.(?:call|run|Popen)\(\s*\w+.*shell\s*=\s*True",
         ],
         "severity": "critical",
         "description": "Potential command injection -- user input may be executed as shell command",
@@ -32,8 +37,9 @@ DANGEROUS_PATTERNS = {
     "dangerous_eval": {
         "patterns": [
             # exec/eval with variable input (not string literals)
-            r"exec\(\s*(?![\"\'])",
-            r"eval\(\s*(?![\"\'])",
+            # Word boundary (?<!\w) prevents matching run_eval(), etc.
+            r"(?<!\w)exec\(\s*(?![\"\'])",
+            r"(?<!\w)eval\(\s*(?![\"\'])",
         ],
         "severity": "critical",
         "description": "Dynamic code execution -- user input may be executed as code",
@@ -41,8 +47,23 @@ DANGEROUS_PATTERNS = {
     },
     "sql_injection": {
         "patterns": [
-            r'f"[^"]*(?:SELECT|INSERT|UPDATE|DELETE|DROP|CREATE)',
-            r"f'[^']*(?:SELECT|INSERT|UPDATE|DELETE|DROP|CREATE)",
+            # f-string with full SQL statement pattern (keyword + SQL target)
+            (
+                r'f"[^"]*(?:SELECT\s+[\w*].*?FROM'
+                r"|INSERT\s+INTO"
+                r"|UPDATE\s+\w+\s+SET"
+                r"|DELETE\s+FROM"
+                r"|DROP\s+(?:TABLE|INDEX|VIEW|DATABASE)"
+                r"|CREATE\s+(?:TABLE|INDEX|VIEW|DATABASE))"
+            ),
+            (
+                r"f'[^']*(?:SELECT\s+[\w*].*?FROM"
+                r"|INSERT\s+INTO"
+                r"|UPDATE\s+\w+\s+SET"
+                r"|DELETE\s+FROM"
+                r"|DROP\s+(?:TABLE|INDEX|VIEW|DATABASE)"
+                r"|CREATE\s+(?:TABLE|INDEX|VIEW|DATABASE))"
+            ),
             r'\.execute\(\s*f"',
             r"\.execute\(\s*f'",
             r'\.execute\([^)]*%\s',
@@ -54,8 +75,9 @@ DANGEROUS_PATTERNS = {
     },
     "hardcoded_credential": {
         "patterns": [
-            # Only flag hardcoded secrets (string literals assigned to secret-like vars)
-            r'(?:api_key|token|secret|password)\s*=\s*["\'][^"\']{8,}',
+            # Only flag hardcoded secrets outside docstrings/comments
+            # Require assignment-like context (not inside triple-quoted strings)
+            r'^[^#\n]*(?:api_key|token|secret|password)\s*=\s*["\'][^"\']{8,}',
         ],
         "severity": "high",
         "description": "Hardcoded credential -- secret value embedded in source code",
@@ -102,8 +124,9 @@ TS_DANGEROUS_PATTERNS = {
         "patterns": [
             # Object.assign with user input, deep merge without protection
             r"Object\.assign\(\s*\{\s*\}\s*,",
-            # Only flag [key]=value when the key comes from user/external input
-            r"\[(?:input|params|args|body|query|req)\.\w*\]\s*=",
+            # Only flag dynamic property assignment from raw user input
+            # (not this.map[id]=value which is controlled)
+            r"(?<!\w)\w+\[(?:input|params|args|body|query|req)\[\w+\]\]\s*=",
             r"(?:lodash|_)\.merge\(",
         ],
         "severity": "high",
@@ -118,10 +141,14 @@ TS_DANGEROUS_PATTERNS = {
     },
     "child_process_injection": {
         "patterns": [
-            r"child_process\.exec\(",
-            r"child_process\.execSync\(",
-            r"execSync\(",
-            r"exec\(\s*`",  # template literal in exec
+            # Only flag when command includes variable/template interpolation
+            r"child_process\.exec\(\s*(?![\"'])",
+            r"child_process\.exec\(\s*`[^`]*\$\{",
+            r"child_process\.execSync\(\s*(?![\"'])",
+            r"child_process\.execSync\(\s*`[^`]*\$\{",
+            r"(?<!\w)execSync\(\s*(?![\"'])",
+            r"(?<!\w)execSync\(\s*`[^`]*\$\{",
+            r"(?<!\w)exec\(\s*`[^`]*\$\{",
         ],
         "severity": "critical",
         "description": (

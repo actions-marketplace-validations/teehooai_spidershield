@@ -216,3 +216,33 @@ def test_security_examples_excluded(tmp_path: Path):
     py_file.write_text('import os\nos.system("ls")\n')
     score, issues = scan_security(tmp_path)
     assert len(issues) == 0
+
+
+def test_security_no_false_positive_eval_in_name(tmp_path: Path):
+    """Function names containing 'eval' (run_eval, do_evaluate) should NOT trigger."""
+    py_file = tmp_path / "server.py"
+    py_file.write_text('def run_eval(original, improved):\n    return True\n')
+    score, issues = scan_security(tmp_path)
+    assert not any(i.category == "dangerous_eval" for i in issues)
+
+
+def test_security_no_false_positive_sql_in_message(tmp_path: Path):
+    """SQL keywords in f-string messages (not queries) should NOT trigger."""
+    py_file = tmp_path / "server.py"
+    py_file.write_text(
+        'def warn():\n'
+        '    msg = f"Block INSERT/UPDATE/DELETE/DROP by default"\n'
+    )
+    score, issues = scan_security(tmp_path)
+    assert not any(i.category == "sql_injection" for i in issues)
+
+
+def test_security_real_sql_injection_still_detected(tmp_path: Path):
+    """Real SQL injection with full statement (SELECT...FROM) must still be caught."""
+    py_file = tmp_path / "server.py"
+    py_file.write_text(
+        'def query(table):\n'
+        '    db.execute(f"SELECT * FROM {table} WHERE id=1")\n'
+    )
+    score, issues = scan_security(tmp_path)
+    assert any(i.category == "sql_injection" for i in issues)
