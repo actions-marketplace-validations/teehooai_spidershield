@@ -164,6 +164,61 @@ Add TeeShield to your CI pipeline:
     fail-below: '6.0'
 ```
 
+## Agent security scanning (new in v0.2)
+
+Scan AI agent installations for security misconfigurations and malicious skills.
+
+```bash
+teeshield agent-check ~/.openclaw
+```
+
+**What it checks:**
+- 10 configuration security checks (auth, sandbox, SSRF, permissions, etc.)
+- 20+ malicious skill patterns (reverse shells, credential theft, prompt injection)
+- Toxic flow detection -- flags skills that can read sensitive data AND send it externally
+- Typosquat detection for skill names
+- Excessive permission requests
+
+**Advanced options:**
+
+```bash
+# Verify skill integrity (rug pull detection)
+teeshield agent-check --verify
+
+# Only approved skills allowed
+teeshield agent-check --allowlist approved.json
+
+# Strict mode: fail on any finding
+teeshield agent-check --policy strict
+
+# Ignore specific rules
+teeshield agent-check --ignore TS-W001 --ignore typosquat
+
+# Auto-fix configuration issues
+teeshield agent-check --fix
+
+# SARIF output for GitHub Code Scanning
+teeshield agent-check --format sarif > results.sarif
+```
+
+**Skill pinning (rug pull protection):**
+
+```bash
+teeshield agent-pin add ~/.openclaw/skills/my-skill/SKILL.md
+teeshield agent-pin add-all
+teeshield agent-pin verify    # detect tampered skills
+teeshield agent-pin list
+```
+
+**46 standardized issue codes** across 4 categories:
+
+| Code | Category | Example |
+|------|----------|---------|
+| TS-E001~E015 | Error (malicious) | Reverse shell, credential theft, prompt injection |
+| TS-W001~W011 | Warning (suspicious) | Typosquat, toxic flow, unapproved skill |
+| TS-C001~C018 | Config | No auth, sandbox disabled, SSRF enabled |
+| TS-P001~P002 | Pin | Verified, tampered |
+
 ## Commands
 
 | Command | Description |
@@ -172,6 +227,8 @@ Add TeeShield to your CI pipeline:
 | `teeshield rewrite <path>` | Rewrite tool descriptions |
 | `teeshield harden <path>` | Security hardening recommendations |
 | `teeshield eval <original> <improved>` | Compare tool selection accuracy |
+| `teeshield agent-check [dir]` | Scan an AI agent for security issues |
+| `teeshield agent-pin <cmd>` | Manage skill pins for rug pull detection |
 
 ## Threat model
 
@@ -182,10 +239,13 @@ TeeShield is a **static analysis linter**, not a runtime sandbox.
 - Missing side-effect declarations (writes, deletes, network calls)
 - Unsafe permission patterns (unbounded file access, unrestricted queries)
 - Vague descriptions that give agents no operational boundaries
+- Malicious agent skills (reverse shells, credential theft, prompt injection)
+- Dangerous capability combinations (data exfiltration flows)
+- Insecure agent configurations (no auth, disabled sandbox, open DM policy)
+- Skill tampering (rug pull detection via content hashing)
 
 **What it does NOT do:**
 - Runtime isolation or sandboxing
-- Prompt injection detection
 - Network traffic monitoring
 - Access control enforcement
 
