@@ -93,9 +93,7 @@ def _load_scenarios(path: str) -> list[dict]:
 
 def _auto_generate_scenarios(server_path: Path) -> list[dict]:
     """Auto-generate basic test scenarios from tool definitions."""
-    from teeshield.scanner.description_quality import _extract_tools
-
-    tools = _extract_tools(server_path)
+    tools = _load_tools(server_path)
     scenarios = []
     for tool in tools:
         scenarios.append({
@@ -105,13 +103,32 @@ def _auto_generate_scenarios(server_path: Path) -> list[dict]:
     return scenarios
 
 
+def _load_tools(server_path: Path) -> list[dict]:
+    """Load tools from a directory (source extraction) or JSON file."""
+    if server_path.suffix == ".json":
+        import json
+        data = json.loads(server_path.read_text(encoding="utf-8"))
+        # Rewrite output format: list of {name, original, rewritten, score}
+        if isinstance(data, list):
+            return [
+                {
+                    "name": t["name"],
+                    "description": t.get("rewritten") or t.get("original", ""),
+                }
+                for t in data
+            ]
+        return []
+
+    from teeshield.scanner.description_quality import _extract_tools
+    return _extract_tools(server_path)
+
+
 def _evaluate_server(
-    server_path: Path, scenarios: list[dict], models: list[str], use_llm: bool = False,
+    server_path: Path, scenarios: list[dict], models: list[str],
+    use_llm: bool = False,
 ) -> list[EvalResult]:
     """Evaluate tool selection for a server against scenarios."""
-    from teeshield.scanner.description_quality import _extract_tools
-
-    tools = _extract_tools(server_path)
+    tools = _load_tools(server_path)
     if not tools:
         return []
 

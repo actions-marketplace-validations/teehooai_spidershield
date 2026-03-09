@@ -78,6 +78,21 @@ def run_harden(
             for f in findings
         ]
 
+    # Record findings to local dataset
+    from teeshield.dataset.collector import record_hardener_fix
+    engine_name = "llm" if use_llm else "template"
+    for f in findings:
+        record_hardener_fix(
+            target=server_path,
+            category=f.category,
+            file=f.file,
+            suggestion=f.suggestion,
+            code_fix=f.code_fix,
+            confidence=f.confidence,
+            line=f.line,
+            engine=engine_name,
+        )
+
     # Print results
     _print_findings(findings, use_llm)
 

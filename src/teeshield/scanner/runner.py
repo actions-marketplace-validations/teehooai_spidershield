@@ -143,6 +143,10 @@ def run_scan(target: str, output_path: str | None = None, output_format: str = "
 
     report = run_scan_report(target)
 
+    # Record to local dataset (best-effort, never fails the scan)
+    from teeshield.dataset.collector import record_scan
+    record_scan(report)
+
     if output_format == "json" or output_path:
         json_str = report.model_dump_json(indent=2)
         if output_path:

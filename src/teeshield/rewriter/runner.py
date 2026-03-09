@@ -328,6 +328,19 @@ def run_rewrite(
             "score": gate_result.score,
         })
 
+        # Record rewrite pair to local dataset
+        from teeshield.dataset.collector import record_rewrite
+        record_rewrite(
+            target=server_path,
+            tool_name=tool["name"],
+            original=original,
+            rewritten=rewritten,
+            original_score=_quick_score(original),
+            rewritten_score=gate_result.score,
+            engine="llm" if (use_llm and llm_provider) else "template",
+            passed=gate_result.passed,
+        )
+
     if skipped:
         console.print(
             f"[yellow]Quality gate: {skipped}/{len(tools)} rewrites "

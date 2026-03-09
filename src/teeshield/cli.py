@@ -210,7 +210,7 @@ def agent_check(
             print_fix_report(fixes)
         else:
             import json
-            console.print(json.dumps({"fixes": fixes}, indent=2))
+            click.echo(json.dumps({"fixes": fixes}, indent=2))
         return
 
     if fmt == "text":
@@ -219,11 +219,11 @@ def agent_check(
     elif fmt == "json":
         import dataclasses
         import json
-        console.print(json.dumps(dataclasses.asdict(result), indent=2))
+        click.echo(json.dumps(dataclasses.asdict(result), indent=2))
     elif fmt == "sarif":
         from teeshield.agent.sarif import sarif_to_json, scan_result_to_sarif
         sarif = scan_result_to_sarif(result)
-        console.print(sarif_to_json(sarif))
+        click.echo(sarif_to_json(sarif))
 
     # Exit codes based on policy
     from teeshield.agent.models import Severity, SkillVerdict
@@ -344,6 +344,247 @@ def pin_remove(skill_name: str, pin_dir: str | None):
         console.print(f"[green]Unpinned:[/green] {skill_name}")
     else:
         console.print(f"[yellow]Not found:[/yellow] {skill_name}")
+
+
+@main.group(name="dataset")
+def dataset():
+    """Manage the local security dataset."""
+
+
+@dataset.command(name="stats")
+def dataset_stats():
+    """Show dataset statistics."""
+    from teeshield.dataset.db import get_stats
+
+    stats = get_stats()
+    if not stats["db_exists"]:
+        console.print(
+            "[dim]No dataset yet. Run `teeshield scan`"
+            " to start collecting data.[/dim]"
+        )
+        return
+
+    console.print("\n[bold]TeeShield Security Dataset[/bold]")
+    console.print(f"  Location: [dim]{stats['db_path']}[/dim]")
+    console.print(f"  Size: {stats['db_size_kb']} KB\n")
+    console.print(
+        f"  Scans: {stats['total_scans']}"
+        f" ({stats['unique_targets']} unique targets)"
+    )
+    console.print(f"  Security issues: {stats['total_issues']}")
+    console.print(f"  Tool descriptions: {stats['total_descriptions']}")
+    console.print(f"  Hardener fixes: {stats['total_fixes']}")
+    if stats.get("total_prs"):
+        console.print(
+            f"  Pull requests: {stats['total_prs']}"
+            f" ({stats['pr_tools_changed']} tools changed)"
+        )
+
+    if stats.get("pr_status_distribution"):
+        console.print("\n  [bold]PR status:[/bold]")
+        status_colors = {
+            "open": "yellow", "merged": "green",
+            "closed": "red", "rejected": "red",
+        }
+        for st, count in stats["pr_status_distribution"].items():
+            c = status_colors.get(st, "dim")
+            console.print(f"    [{c}]{st}[/{c}]: {count}")
+
+    if stats.get("rating_distribution"):
+        console.print("\n  [bold]Rating distribution:[/bold]")
+        for rating, count in stats["rating_distribution"].items():
+            console.print(f"    {rating}: {count}")
+
+    if stats.get("top_issue_categories"):
+        console.print("\n  [bold]Top issue categories:[/bold]")
+        for cat in stats["top_issue_categories"]:
+            console.print(f"    {cat['category']}: {cat['count']}")
+
+    console.print()
+
+
+@dataset.command(name="export")
+@click.argument("output_path")
+@click.option(
+    "--format", "fmt",
+    type=click.Choice(["json", "csv"]),
+    default="json",
+    help="Export format",
+)
+def dataset_export(output_path: str, fmt: str):
+    """Export dataset to JSON or CSV."""
+    import json
+    from pathlib import Path
+
+    from teeshield.dataset.db import DEFAULT_DB_PATH, get_connection
+
+    if not DEFAULT_DB_PATH.exists():
+        console.print("[red]No dataset found. Run scans first.[/red]")
+        raise SystemExit(1)
+
+    with get_connection() as conn:
+        scans = [
+            dict(r) for r in conn.execute("SELECT * FROM scans").fetchall()
+        ]
+        issues = [
+            dict(r)
+            for r in conn.execute("SELECT * FROM security_issues").fetchall()
+        ]
+        descriptions = [
+            dict(r)
+            for r in conn.execute(
+                "SELECT * FROM tool_descriptions"
+            ).fetchall()
+        ]
+        fixes = [
+            dict(r)
+            for r in conn.execute("SELECT * FROM hardener_fixes").fetchall()
+        ]
+        prs = [
+            dict(r)
+            for r in conn.execute("SELECT * FROM pull_requests").fetchall()
+        ]
+
+    if fmt == "json":
+        data = {
+            "version": 2,
+            "scans": scans,
+            "security_issues": issues,
+            "tool_descriptions": descriptions,
+            "hardener_fixes": fixes,
+            "pull_requests": prs,
+        }
+        Path(output_path).write_text(
+            json.dumps(data, indent=2, default=str), encoding="utf-8",
+        )
+    elif fmt == "csv":
+        import csv
+
+        if scans:
+            with open(output_path, "w", newline="", encoding="utf-8") as f:
+                writer = csv.DictWriter(f, fieldnames=scans[0].keys())
+                writer.writeheader()
+                writer.writerows(scans)
+
+    console.print(f"[green]Dataset exported to {output_path}[/green]")
+
+
+@dataset.command(name="reset")
+@click.confirmation_option(
+    prompt="This will delete all collected data. Are you sure?",
+)
+def dataset_reset():
+    """Delete all collected dataset data."""
+    from teeshield.dataset.db import DEFAULT_DB_PATH
+
+    if DEFAULT_DB_PATH.exists():
+        DEFAULT_DB_PATH.unlink()
+        console.print("[green]Dataset reset.[/green]")
+    else:
+        console.print("[dim]No dataset to reset.[/dim]")
+
+
+@dataset.command(name="pr-add")
+@click.argument("repo")
+@click.argument("pr_number", type=int)
+@click.option("--title", "-t", required=True, help="PR title")
+@click.option(
+    "--status", "-s",
+    type=click.Choice(["open", "merged", "closed", "rejected"]),
+    default="open",
+)
+@click.option("--strategy", default=None, help="PR strategy (hand-crafted, template)")
+@click.option("--tools", "tools_changed", type=int, default=0, help="Tools changed")
+@click.option("--engine", default=None, help="Engine used (template/llm)")
+@click.option("--date", "submitted_at", default=None, help="Submit date (YYYY-MM-DD)")
+@click.option("--notes", default=None, help="Additional notes")
+@click.option("--rejection-reason", default=None, help="Why rejected/closed")
+def dataset_pr_add(
+    repo: str,
+    pr_number: int,
+    title: str,
+    status: str,
+    strategy: str | None,
+    tools_changed: int,
+    engine: str | None,
+    submitted_at: str | None,
+    notes: str | None,
+    rejection_reason: str | None,
+):
+    """Add or update a PR in the dataset."""
+    from teeshield.dataset.collector import record_pr
+
+    merged_at = submitted_at if status == "merged" else None
+    closed_at = submitted_at if status in ("closed", "rejected") else None
+
+    pr_id = record_pr(
+        repo=repo,
+        pr_number=pr_number,
+        title=title,
+        status=status,
+        strategy=strategy,
+        tools_changed=tools_changed,
+        engine=engine,
+        submitted_at=submitted_at,
+        merged_at=merged_at,
+        closed_at=closed_at,
+        rejection_reason=rejection_reason,
+        notes=notes,
+    )
+    if pr_id:
+        console.print(
+            f"[green]Recorded:[/green] {repo}#{pr_number}"
+            f" [{status}]"
+        )
+    else:
+        console.print("[red]Failed to record PR.[/red]")
+
+
+@dataset.command(name="pr-list")
+@click.option(
+    "--status", "-s",
+    type=click.Choice(["open", "merged", "closed", "rejected"]),
+    default=None,
+    help="Filter by status",
+)
+def dataset_pr_list(status: str | None):
+    """List tracked PRs."""
+    from rich.table import Table
+
+    from teeshield.dataset.collector import get_prs
+
+    prs = get_prs(status=status)
+    if not prs:
+        console.print("[dim]No PRs tracked yet.[/dim]")
+        return
+
+    table = Table(title="Tracked Pull Requests")
+    table.add_column("Repo", style="bold")
+    table.add_column("#", justify="right")
+    table.add_column("Title", width=40)
+    table.add_column("Status")
+    table.add_column("Tools")
+    table.add_column("Strategy")
+    table.add_column("Date")
+
+    status_colors = {
+        "open": "yellow", "merged": "green",
+        "closed": "red", "rejected": "red",
+    }
+    for pr in prs:
+        c = status_colors.get(pr["status"], "dim")
+        date = (pr.get("submitted_at") or "")[:10]
+        table.add_row(
+            pr["repo"],
+            str(pr["pr_number"]),
+            pr["title"][:40],
+            f"[{c}]{pr['status']}[/{c}]",
+            str(pr["tools_changed"]),
+            pr.get("strategy") or "-",
+            date,
+        )
+
+    console.print(table)
 
 
 @main.command(name="eval")

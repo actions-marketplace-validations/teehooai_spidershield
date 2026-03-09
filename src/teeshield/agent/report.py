@@ -141,7 +141,7 @@ def _print_summary(result: ScanResult) -> None:
     }
     coverage_parts = []
     for name, checked in checks.items():
-        icon = "[green]✓[/green]" if checked else "[dim]✗[/dim]"
+        icon = "[green]Y[/green]" if checked else "[dim]N[/dim]"
         coverage_parts.append(f"{icon} {name}")
     summary_parts.append(
         f"Audit coverage: {af.coverage_pct}% ({' '.join(coverage_parts)})"
