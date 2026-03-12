@@ -556,6 +556,19 @@ def _extract_tools(path: Path) -> list[dict]:
                 tools.append({"name": name, "description": desc})
                 existing_names.add(name)
 
+        # Go: pkg.MustTool("name", "description", handler) — e.g. mcpgrafana.MustTool
+        go_musttool = re.finditer(
+            r'\w+\.MustTool\(\s*"([a-zA-Z_][\w-]*)"\s*,\s*"([^"]+)"',
+            content,
+            re.DOTALL,
+        )
+        for match in go_musttool:
+            name = match.group(1)
+            desc = match.group(2).strip()
+            if name not in existing_names:
+                tools.append({"name": name, "description": desc})
+                existing_names.add(name)
+
         # Go: ToolDefinition{Name: "...", Description: "..."}
         go_tooldef = re.finditer(
             r'ToolDefinition\s*\{[^}]*?Name:\s*["\']([a-zA-Z_][\w-]*)["\']'

@@ -554,6 +554,54 @@ def _print_comparison(results: list[dict]):
     console.print(f"  >= 9.8: {above_98}/{len(new_scores)} tools")
 
 
+def _apply_go_rewrite(content: str, tool_name: str, old_desc: str, new_desc: str) -> str | None:
+    """Replace a Go tool description only within known MCP tool definition patterns.
+
+    Returns the updated content string, or None if no match was found.
+    Handles both double-quoted and backtick Go strings safely.
+    """
+    escaped_name = re.escape(tool_name)
+    escaped_old = re.escape(old_desc)
+
+    # Escape new_desc for double-quoted Go strings
+    dq_new = new_desc.replace("\\", "\\\\").replace('"', '\\"')
+
+    # Pattern 1: MustTool / NewTool / Tool with tool name as first arg, description as second
+    # e.g.: mcpgrafana.MustTool("list_teams", "old desc", handler)
+    # e.g.: mcp.NewTool("list_teams", mcp.WithDescription("old desc"))
+    patterns = [
+        # MustTool("name", "desc", ...)
+        (
+            rf'(\w+\.(?:MustTool|AddTool|RegisterTool)\s*\(\s*"{escaped_name}"\s*,\s*")({escaped_old})(")',
+            rf'\g<1>{dq_new}\g<3>',
+        ),
+        # NewTool("name", WithDescription("desc"))
+        (
+            rf'(\.(?:NewTool)\s*\(\s*"{escaped_name}".*?WithDescription\s*\(\s*")({escaped_old})(")',
+            rf'\g<1>{dq_new}\g<3>',
+        ),
+        # Tool struct: Name: "name", Description: "desc"
+        (
+            rf'(Name:\s*"{escaped_name}"[^}}]*?Description:\s*")({escaped_old})(")',
+            rf'\g<1>{dq_new}\g<3>',
+        ),
+        # Backtick versions of the above (no escaping needed, but no backticks allowed in new_desc)
+        (
+            rf'(\w+\.(?:MustTool|AddTool|RegisterTool)\s*\(\s*"{escaped_name}"\s*,\s*`)({escaped_old})(`)' ,
+            rf'\g<1>{new_desc}\g<3>' if '`' not in new_desc else None,
+        ),
+    ]
+
+    for pattern, replacement in patterns:
+        if replacement is None:
+            continue
+        new_content = re.sub(pattern, replacement, content, count=1, flags=re.DOTALL)
+        if new_content != content:
+            return new_content
+
+    return None
+
+
 def _apply_rewrites(path: Path, results: list[dict]) -> int:
     """Apply rewritten descriptions back to source files.
 
@@ -572,12 +620,12 @@ def _apply_rewrites(path: Path, results: list[dict]) -> int:
         "build", ".tox", ".mypy_cache", "__tests__", ".next", ".nuxt",
     }
     skip_file_patterns = re.compile(
-        r'(?:^test_|_test\.py$|\.test\.[jt]sx?$|\.spec\.[jt]sx?$'
+        r'(?:^test_|_test\.py$|_test\.go$|\.test\.[jt]sx?$|\.spec\.[jt]sx?$'
         r'|\.d\.ts$|\.config\.[jt]s$|\.stories\.[jt]sx?$)',
         re.IGNORECASE,
     )
     source_files = []
-    for ext in ("*.py", "*.ts", "*.js"):
+    for ext in ("*.py", "*.ts", "*.js", "*.go"):
         for f in path.rglob(ext):
             if any(part in skip_dirs for part in f.parts):
                 continue
@@ -593,16 +641,25 @@ def _apply_rewrites(path: Path, results: list[dict]) -> int:
 
         original_content = content
         modified = False
+        is_go = source_file.suffix == ".go"
 
         for tool_name, rewrite_info in rewrites.items():
             old_desc = rewrite_info["original"]
             new_desc = rewrite_info["rewritten"]
 
-            if not old_desc or old_desc not in content:
+            if not old_desc:
                 continue
 
-            # Replace the description in the file
-            content = content.replace(old_desc, new_desc, 1)
+            if is_go:
+                new_content = _apply_go_rewrite(content, tool_name, old_desc, new_desc)
+                if new_content is None:
+                    continue
+                content = new_content
+            else:
+                if old_desc not in content:
+                    continue
+                # Replace the description in the file
+                content = content.replace(old_desc, new_desc, 1)
             if content != original_content:
                 modified = True
                 applied += 1
