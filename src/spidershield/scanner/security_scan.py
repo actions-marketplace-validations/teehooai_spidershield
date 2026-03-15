@@ -182,6 +182,46 @@ DANGEROUS_PATTERNS = {
         "description": "Secret compared with == operator -- timing side-channel may leak value length",
         "fix": "Use hmac.compare_digest() or secrets.compare_digest() for constant-time comparison",
     },
+    "tool_description_poison": {
+        "patterns": [
+            # Hidden instruction tags in tool descriptions (MCP-specific attack)
+            # These inject directives into LLM context via tool metadata
+            r"<IMPORTANT>",
+            r"<HIDDEN>",
+            r"<SECRET>",
+            r"<SYSTEM>",
+            # Instruction override patterns embedded in description strings
+            r'(?:description|__doc__)\s*=.*(?:ignore previous|disregard|forget your|override your)',
+            # Dynamic description mutation (rug pull preparation)
+            r"__doc__\s*=\s*(?!None)",
+        ],
+        "severity": "critical",
+        "description": "Tool description contains hidden directives that may manipulate LLM behavior",
+        "fix": "Remove hidden XML tags and instruction-override text from tool descriptions",
+    },
+    "metadata_secret_leak": {
+        "patterns": [
+            # AWS Access Key ID (always starts with AKIA)
+            r"\bAKIA[0-9A-Z]{16}\b",
+            # OpenAI API key
+            r"\bsk-(?:proj-)?[A-Za-z0-9_-]{20,}\b",
+            # Anthropic API key
+            r"\bsk-ant-[A-Za-z0-9_-]{20,}\b",
+            # GitHub tokens (PAT, OAuth, App, Actions)
+            r"\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9_]{36,}\b",
+            # Stripe API keys
+            r"\b(?:sk|pk)_(?:test|live)_[A-Za-z0-9]{24,}\b",
+            # Slack tokens
+            r"\bxox[bpors]-[A-Za-z0-9-]{10,}\b",
+            # Private keys embedded in source
+            r"-----BEGIN\s+(?:RSA\s+)?PRIVATE\s+KEY-----",
+            # API keys in URL query strings
+            r"""(?:api_key|apikey|access_token|token|key)=[A-Za-z0-9_-]{16,}""",
+        ],
+        "severity": "critical",
+        "description": "Hardcoded secret or API key found in source code — may leak via MCP tool metadata",
+        "fix": "Move secrets to environment variables; never embed credentials in source or tool descriptions",
+    },
 }
 
 # TypeScript / JavaScript specific patterns (checked only for .ts/.js files)
@@ -274,6 +314,39 @@ TS_DANGEROUS_PATTERNS = {
             "Validate and resolve paths against an allowed base"
             " directory using path.resolve + startsWith check"
         ),
+    },
+    "ts_tool_description_poison": {
+        "patterns": [
+            # Hidden instruction tags in tool descriptions (MCP-specific attack)
+            r"<IMPORTANT>",
+            r"<HIDDEN>",
+            r"<SECRET>",
+            r"<SYSTEM>",
+            # Instruction override in description strings
+            r'description\s*[:=].*(?:ignore previous|disregard|forget your|override your)',
+        ],
+        "severity": "critical",
+        "description": "Tool description contains hidden directives that may manipulate LLM behavior",
+        "fix": "Remove hidden XML tags and instruction-override text from tool descriptions",
+    },
+    "ts_metadata_secret_leak": {
+        "patterns": [
+            # AWS Access Key ID
+            r"\bAKIA[0-9A-Z]{16}\b",
+            # OpenAI API key
+            r"\bsk-(?:proj-)?[A-Za-z0-9_-]{20,}\b",
+            # GitHub tokens
+            r"\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9_]{36,}\b",
+            # Stripe API keys
+            r"\b(?:sk|pk)_(?:test|live)_[A-Za-z0-9]{24,}\b",
+            # Slack tokens
+            r"\bxox[bpors]-[A-Za-z0-9-]{10,}\b",
+            # Private keys
+            r"-----BEGIN\s+(?:RSA\s+)?PRIVATE\s+KEY-----",
+        ],
+        "severity": "critical",
+        "description": "Hardcoded secret or API key found in source code — may leak via MCP tool metadata",
+        "fix": "Move secrets to environment variables; never embed credentials in source or tool descriptions",
     },
 }
 
