@@ -6,11 +6,13 @@ Covers:
 - check_agent_security tool call (success + options)
 - Unknown tool handling
 - Entry point (run function)
+- End-to-end stdio JSON-RPC handshake (real subprocess)
 """
 
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -229,3 +231,107 @@ class TestServerApp:
         import inspect
         from spidershield.server import main
         assert inspect.iscoroutinefunction(main)
+
+
+# ---------------------------------------------------------------------------
+# End-to-end stdio JSON-RPC (real subprocess)
+# ---------------------------------------------------------------------------
+
+
+class TestServerE2E:
+    """Launch spidershield-server as a subprocess and talk MCP protocol."""
+
+    @pytest.mark.asyncio
+    async def test_initialize_handshake(self) -> None:
+        """Server responds to MCP initialize request over stdio."""
+        from mcp import ClientSession, StdioServerParameters
+        from mcp.client.stdio import stdio_client
+
+        server_params = StdioServerParameters(
+            command=sys.executable,
+            args=["-m", "spidershield.server"],
+        )
+
+        async with stdio_client(server_params) as (read, write):
+            async with ClientSession(read, write) as session:
+                result = await session.initialize()
+                assert result is not None
+                # Server should identify itself
+                assert result.serverInfo.name == "spidershield"
+
+    @pytest.mark.asyncio
+    async def test_list_tools_e2e(self) -> None:
+        """List tools via real MCP protocol."""
+        from mcp import ClientSession, StdioServerParameters
+        from mcp.client.stdio import stdio_client
+
+        server_params = StdioServerParameters(
+            command=sys.executable,
+            args=["-m", "spidershield.server"],
+        )
+
+        async with stdio_client(server_params) as (read, write):
+            async with ClientSession(read, write) as session:
+                await session.initialize()
+                tools_result = await session.list_tools()
+                tool_names = {t.name for t in tools_result.tools}
+                assert "scan_mcp_server" in tool_names
+                assert "check_agent_security" in tool_names
+
+    @pytest.mark.asyncio
+    async def test_call_scan_missing_target_e2e(self) -> None:
+        """Call scan_mcp_server with missing target via real protocol."""
+        from mcp import ClientSession, StdioServerParameters
+        from mcp.client.stdio import stdio_client
+
+        server_params = StdioServerParameters(
+            command=sys.executable,
+            args=["-m", "spidershield.server"],
+        )
+
+        async with stdio_client(server_params) as (read, write):
+            async with ClientSession(read, write) as session:
+                await session.initialize()
+                result = await session.call_tool("scan_mcp_server", {"target": ""})
+                assert len(result.content) >= 1
+                assert "Error" in result.content[0].text
+
+    @pytest.mark.asyncio
+    async def test_call_agent_check_e2e(self, tmp_path: Path) -> None:
+        """Call check_agent_security via real protocol."""
+        from mcp import ClientSession, StdioServerParameters
+        from mcp.client.stdio import stdio_client
+
+        (tmp_path / "config.yaml").write_text("gateway:\n  bind: localhost:8080\n")
+
+        server_params = StdioServerParameters(
+            command=sys.executable,
+            args=["-m", "spidershield.server"],
+        )
+
+        async with stdio_client(server_params) as (read, write):
+            async with ClientSession(read, write) as session:
+                await session.initialize()
+                result = await session.call_tool("check_agent_security", {
+                    "agent_dir": str(tmp_path),
+                    "scan_skills": False,
+                })
+                data = json.loads(result.content[0].text)
+                assert "findings" in data
+
+    @pytest.mark.asyncio
+    async def test_unknown_tool_e2e(self) -> None:
+        """Unknown tool returns error via real protocol."""
+        from mcp import ClientSession, StdioServerParameters
+        from mcp.client.stdio import stdio_client
+
+        server_params = StdioServerParameters(
+            command=sys.executable,
+            args=["-m", "spidershield.server"],
+        )
+
+        async with stdio_client(server_params) as (read, write):
+            async with ClientSession(read, write) as session:
+                await session.initialize()
+                result = await session.call_tool("nonexistent_tool", {})
+                assert "Unknown tool" in result.content[0].text
