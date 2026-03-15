@@ -27,6 +27,12 @@ DANGEROUS_PATTERNS = {
             r"os\.path\.join\([^)]*\.\.",
             r"open\([^)]*\+",
             r'Path\([^)]*\+',
+            # MCP tool handler: file ops on parameter-named variables without validation
+            # Matches open(path), open(file_path), open(filepath), Path(directory).read_text()
+            r"open\(\s*(?:path|file_path|filepath|file_name|filename|directory|dir_path)\s*[,\)]",
+            r"Path\(\s*(?:path|file_path|filepath|file_name|filename|directory|dir_path)\s*\)",
+            # os.listdir / os.walk with user-controlled variable
+            r"os\.(?:listdir|walk|scandir)\(\s*(?:path|directory|dir_path|folder)\s*\)",
         ],
         "severity": "high",
         "description": "Potential path traversal -- user input may escape intended directory",
@@ -307,6 +313,10 @@ TS_DANGEROUS_PATTERNS = {
             # parameters in TS codebases. Also exclude test helper files.
             r"path\.join\([^)]*(?:req\.(?:params|query|body|path)|ctx\.(?:params|query))",
             r"fs\.(?:readFile|writeFile|unlink|rmdir|mkdir)(?:Sync)?\([^)]*\+",
+            # MCP tool handler: fs ops on parameter-named variables
+            r"fs\.(?:readFile|writeFile|readdir|unlink)(?:Sync)?\(\s*(?:path|filePath|fileName|directory)\s*[,\)]",
+            r"Deno\.readTextFile\(\s*(?:path|filePath)\s*\)",
+            r"Bun\.file\(\s*(?:path|filePath)\s*\)",
         ],
         "severity": "high",
         "description": "Potential path traversal -- user input used in file system operations",
