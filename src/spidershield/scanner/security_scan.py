@@ -481,6 +481,8 @@ _EXCLUDE_DIRS = frozenset({
     ".next", ".nuxt", ".cache", "coverage",
     # Dev tooling: setup/migration/seed scripts are not MCP tool code
     "scripts", "migrations", "migration", "seeds", "seed",
+    # Build/CLI/platform tooling: not MCP runtime paths
+    "ingest", "electron",
 })
 
 
