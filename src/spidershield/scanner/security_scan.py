@@ -188,6 +188,28 @@ DANGEROUS_PATTERNS = {
         "description": "Secret compared with == operator -- timing side-channel may leak value length",
         "fix": "Use hmac.compare_digest() or secrets.compare_digest() for constant-time comparison",
     },
+    "input_reflection": {
+        "patterns": [
+            # User input directly in return f-string (prompt injection via reflection)
+            # MCP tool that returns user input without sanitization
+            r"return\s+f[\"'].*\{(?:text|input|query|message|content|user_input|prompt)\}",
+            # Direct string concatenation in return
+            r"return\s+.*\+\s*(?:text|input|query|message|content|user_input|prompt)\b",
+        ],
+        "severity": "medium",
+        "description": "User input reflected directly in tool output -- may enable prompt injection via reflection",
+        "fix": "Sanitize user input before including in tool output; strip control characters and XML tags",
+    },
+    "excessive_permissions": {
+        "patterns": [
+            # Tool handler that opens ANY path without is_relative_to/startswith check
+            # within 15 lines — detect @tool decorated functions doing unrestricted file I/O
+            r"@(?:mcp|server|app|tool)\.tool[\s\S]{0,500}?open\(\s*(?:path|file|filepath|file_path)\s*[,\)](?:(?!is_relative_to|startswith|resolve|ALLOWED|BASE_DIR|WORKSPACE).){0,300}$",
+        ],
+        "severity": "medium",
+        "description": "MCP tool performs file operations without restricting scope to a safe directory",
+        "fix": "Use Path.resolve() + is_relative_to(allowed_dir) to enforce directory boundaries",
+    },
     "tool_description_poison": {
         "patterns": [
             # Hidden instruction tags in tool descriptions (MCP-specific attack)
@@ -204,6 +226,21 @@ DANGEROUS_PATTERNS = {
         "severity": "critical",
         "description": "Tool description contains hidden directives that may manipulate LLM behavior",
         "fix": "Remove hidden XML tags and instruction-override text from tool descriptions",
+    },
+    "token_leakage": {
+        "patterns": [
+            # Secrets/tokens included in error messages or exceptions
+            r"raise\s+\w+(?:Error|Exception)\(.*(?:token|secret|password|api_key|credential)",
+            # Secrets in f-string error/return messages
+            r'(?:return|raise|print|log)\s*.*f["\'].*\{.*(?:token|secret|password|api_key|key|credential)',
+            # Logging secrets directly
+            r"(?:logger?\.(?:info|debug|warning|error|critical)|print)\s*\(.*(?:token|secret|password|api_key|credential)\b",
+            # Including auth headers in responses or error output
+            r'(?:Authorization|Bearer|X-API-Key).*(?:return|raise|print|log)',
+        ],
+        "severity": "high",
+        "description": "Secret or token may be leaked through error messages, logs, or return values",
+        "fix": "Never include raw credentials in error messages or logs; use masked/redacted values",
     },
     "metadata_secret_leak": {
         "patterns": [
@@ -338,6 +375,26 @@ TS_DANGEROUS_PATTERNS = {
         "severity": "critical",
         "description": "Tool description contains hidden directives that may manipulate LLM behavior",
         "fix": "Remove hidden XML tags and instruction-override text from tool descriptions",
+    },
+    "ts_token_leakage": {
+        "patterns": [
+            # Secrets in template literal error/return
+            r'(?:throw|return|console\.(?:log|error|warn))\s*.*`[^`]*\$\{.*(?:token|secret|password|apiKey|credential)',
+            # Including auth headers in responses
+            r'(?:Authorization|Bearer|X-API-Key).*(?:return|throw|console\.)',
+        ],
+        "severity": "high",
+        "description": "Secret or token may be leaked through error messages, logs, or return values",
+        "fix": "Never include raw credentials in error messages or logs; use masked/redacted values",
+    },
+    "ts_input_reflection": {
+        "patterns": [
+            # User input directly in return template literal
+            r"return\s+`[^`]*\$\{(?:text|input|query|message|content|userInput|prompt)\}",
+        ],
+        "severity": "medium",
+        "description": "User input reflected directly in tool output -- may enable prompt injection via reflection",
+        "fix": "Sanitize user input before including in tool output; strip control characters and XML tags",
     },
     "ts_metadata_secret_leak": {
         "patterns": [
