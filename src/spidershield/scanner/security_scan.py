@@ -552,6 +552,72 @@ def _classify_file_context(rel_path: str) -> str:
     return "runtime"
 
 
+# Safe patterns per category — if matched, confidence = LOW (likely FP)
+# Derived from observation.db analysis: 1851 observations, 48 FP rules
+_SAFE_PATTERNS: dict[str, list[re.Pattern]] = {
+    "dangerous_eval": [
+        re.compile(r"ast\.literal_eval\("),       # safe eval
+        re.compile(r"json\.loads\("),              # JSON parsing, not eval
+        re.compile(r"eval\(\s*[\"'][^\"']+[\"']"), # eval("literal") — string constant
+    ],
+    "command_injection": [
+        re.compile(r"subprocess\.\w+\(\s*\["),     # list form = no shell
+        re.compile(r"shlex\.quote\("),             # input sanitized
+        re.compile(r"shell\s*=\s*False"),           # explicitly safe
+        re.compile(r"execFileSync\("),             # no shell invocation
+    ],
+    "sql_injection": [
+        re.compile(r"\.execute\([^,]+,\s*[\[\(]"), # parameterized: execute(sql, [params])
+        re.compile(r"\.execute\([^,]+,\s*\{"),     # parameterized: execute(sql, {params})
+        re.compile(r'placeholders\s*=.*join\(\s*["\']\\?\s*["\']'), # dynamic ? placeholders
+    ],
+    "ts_sql_injection": [
+        re.compile(r"\.\w+\([^)]*\$\d"),           # $1, $2 parameterized
+    ],
+    "path_traversal": [
+        re.compile(r"\.resolve\(\)"),              # path resolved
+        re.compile(r"is_relative_to\("),           # boundary check
+        re.compile(r"os\.path\.abspath\("),         # absolute path
+        re.compile(r"startswith\(\s*(?:ALLOWED|BASE|ROOT|SAFE)"), # prefix check
+    ],
+    "unsafe_deserialization": [
+        re.compile(r"yaml\.safe_load\("),          # safe YAML
+        re.compile(r'YAML\(\s*typ\s*=\s*["\']safe'), # ruamel safe
+        re.compile(r"json\.loads?\("),             # JSON not pickle
+    ],
+}
+
+# User-input source patterns — if matched near a sink, confidence = HIGH
+_USER_INPUT_SOURCES = [
+    re.compile(r"request\.(args|form|json|data|params|query|body)"),
+    re.compile(r"sys\.argv"),
+    re.compile(r"input\("),
+    re.compile(r"arguments\["),     # MCP tool arguments
+    re.compile(r"ctx\.(params|query|body)"),
+    re.compile(r"req\.(params|query|body)"),
+]
+
+
+def _assess_confidence(category: str, code_line: str, context_lines: str) -> str:
+    """Assess confidence level for a finding based on safe patterns and user input sources.
+
+    Returns 'high', 'medium', or 'low'.
+    """
+    # Check safe patterns → LOW confidence
+    safe_pats = _SAFE_PATTERNS.get(category, [])
+    for pat in safe_pats:
+        if pat.search(context_lines):
+            return "low"
+
+    # Check user input sources in context → HIGH confidence
+    for src in _USER_INPUT_SOURCES:
+        if src.search(context_lines):
+            return "high"
+
+    # Default: MEDIUM (dangerous call found, input source unclear)
+    return "medium"
+
+
 def _get_function_body(content: str, start: int, max_lines: int = 30) -> str:
     """Extract the body of a Python function starting after the def line.
 
@@ -671,9 +737,12 @@ def scan_security(path: Path) -> tuple[float, list[SecurityIssue]]:
             i for i in semgrep_issues
             if not Path(i.file).parts or Path(i.file).parts[0] in scoped_dirs
         ]
-    # Tag Semgrep issues with file_context
+    # Tag Semgrep issues with file_context + confidence
     for issue in semgrep_issues:
         issue.file_context = _classify_file_context(issue.file)
+        # Semgrep taint rules = HIGH confidence by default (AST-verified)
+        # Semgrep pattern-only rules = MEDIUM (better than regex but no data flow)
+        issue.confidence = "high" if "taint" in (issue.description or "").lower() else "medium"
     issues.extend(semgrep_issues)
 
     for source_file in source_files:
@@ -709,6 +778,13 @@ def scan_security(path: Path) -> tuple[float, list[SecurityIssue]]:
                         func_body = _get_function_body(content, match.end())
                         if _has_validation(func_body):
                             continue
+                    # Get surrounding context for confidence assessment
+                    lines = content.splitlines()
+                    ctx_start = max(0, line_num - 6)
+                    ctx_end = min(len(lines), line_num + 5)
+                    context_lines = "\n".join(lines[ctx_start:ctx_end])
+                    code_line = lines[line_num - 1] if line_num <= len(lines) else ""
+
                     issues.append(
                         SecurityIssue(
                             severity=config["severity"],
@@ -718,6 +794,7 @@ def scan_security(path: Path) -> tuple[float, list[SecurityIssue]]:
                             description=config["description"],
                             fix_suggestion=config["fix"],
                             file_context=_classify_file_context(rel_path),
+                            confidence=_assess_confidence(category, code_line, context_lines),
                         )
                     )
 
@@ -729,6 +806,12 @@ def scan_security(path: Path) -> tuple[float, list[SecurityIssue]]:
                 for pattern in config["patterns"]:
                     for match in re.finditer(pattern, content):
                         line_num = content[:match.start()].count("\n") + 1
+                        ts_lines = content.splitlines()
+                        ts_ctx_start = max(0, line_num - 6)
+                        ts_ctx_end = min(len(ts_lines), line_num + 5)
+                        ts_context = "\n".join(ts_lines[ts_ctx_start:ts_ctx_end])
+                        ts_code = ts_lines[line_num - 1] if line_num <= len(ts_lines) else ""
+
                         issues.append(
                             SecurityIssue(
                                 severity=config["severity"],
@@ -738,6 +821,7 @@ def scan_security(path: Path) -> tuple[float, list[SecurityIssue]]:
                                 description=config["description"],
                                 fix_suggestion=config["fix"],
                                 file_context=_classify_file_context(rel_path),
+                                confidence=_assess_confidence(category, ts_code, ts_context),
                             )
                         )
 

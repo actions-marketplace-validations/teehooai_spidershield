@@ -30,6 +30,10 @@ class SecurityIssue(BaseModel):
         default="runtime",
         description="File context: runtime / test / build / benchmark / ctf / migration / platform / cli",
     )
+    confidence: str = Field(
+        default="medium",
+        description="Confidence: high (tainted input→sink confirmed) / medium (dangerous call, source unclear) / low (pattern match only)",
+    )
 
 
 class ToolDescriptionScore(BaseModel):
