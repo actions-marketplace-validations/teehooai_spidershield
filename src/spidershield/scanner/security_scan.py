@@ -505,6 +505,53 @@ def _is_excluded_file(rel_path: str) -> bool:
     )
 
 
+def _classify_file_context(rel_path: str) -> str:
+    """Classify a file's context: runtime, test, build, benchmark, or cli.
+
+    Used by downstream consumers (A4 Bug Hunter) to filter false positives.
+    Scanner still reports all issues but tags them with context for filtering.
+    """
+    normalized = rel_path.replace("\\", "/").lower()
+    parts = Path(rel_path).parts
+
+    # Test code
+    if any(p in {"tests", "test", "spec", "__tests__", "e2e", "integration_tests"} for p in parts):
+        return "test"
+    name = Path(rel_path).name.lower()
+    if name.startswith("test_") or name.endswith((".test.ts", ".test.js", ".spec.ts", ".spec.js")):
+        return "test"
+
+    # Build/scripts
+    if any(p in {"scripts", "script"} for p in parts):
+        return "build"
+    if name in {"release.ts", "release.js", "release.mjs"}:
+        return "build"
+    if name.startswith("download-") or name.startswith("download_"):
+        return "build"
+
+    # Benchmark/evaluation
+    if any(p in {"benchmarks", "benchmark", "eval", "evaluation", "synthesis"} for p in parts):
+        return "benchmark"
+
+    # Intentionally vulnerable / CTF
+    if any(p in {"challenges", "vulnerable"} for p in parts):
+        return "ctf"
+    if "damn-vulnerable" in normalized or "damn_vulnerable" in normalized:
+        return "ctf"
+
+    # Migrations / ingest / ETL
+    if any(p in {"migrations", "migration", "ingest", "seeds", "seed"} for p in parts):
+        return "migration"
+
+    # CLI / platform tooling
+    if any(p in {"electron"} for p in parts):
+        return "platform"
+    if name in {"cli.ts", "cli.js", "cli.py", "start.js", "start.ts"}:
+        return "cli"
+
+    return "runtime"
+
+
 def _get_function_body(content: str, start: int, max_lines: int = 30) -> str:
     """Extract the body of a Python function starting after the def line.
 
@@ -624,6 +671,9 @@ def scan_security(path: Path) -> tuple[float, list[SecurityIssue]]:
             i for i in semgrep_issues
             if not Path(i.file).parts or Path(i.file).parts[0] in scoped_dirs
         ]
+    # Tag Semgrep issues with file_context
+    for issue in semgrep_issues:
+        issue.file_context = _classify_file_context(issue.file)
     issues.extend(semgrep_issues)
 
     for source_file in source_files:
@@ -667,6 +717,7 @@ def scan_security(path: Path) -> tuple[float, list[SecurityIssue]]:
                             line=line_num,
                             description=config["description"],
                             fix_suggestion=config["fix"],
+                            file_context=_classify_file_context(rel_path),
                         )
                     )
 
@@ -686,6 +737,7 @@ def scan_security(path: Path) -> tuple[float, list[SecurityIssue]]:
                                 line=line_num,
                                 description=config["description"],
                                 fix_suggestion=config["fix"],
+                                file_context=_classify_file_context(rel_path),
                             )
                         )
 

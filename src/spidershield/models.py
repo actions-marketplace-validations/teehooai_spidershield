@@ -26,6 +26,10 @@ class SecurityIssue(BaseModel):
     line: int | None = None
     description: str
     fix_suggestion: str | None = None
+    file_context: str = Field(
+        default="runtime",
+        description="File context: runtime / test / build / benchmark / ctf / migration / platform / cli",
+    )
 
 
 class ToolDescriptionScore(BaseModel):
