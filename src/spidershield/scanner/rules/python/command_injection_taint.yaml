@@ -1,0 +1,75 @@
+rules:
+  # Taint rule: tracks user input → shell execution
+  # Only flags when untrusted data demonstrably reaches a dangerous sink
+  # Much lower FP rate than pattern-only rules
+
+  - id: mcp-command-injection-taint
+    mode: taint
+    severity: ERROR
+    message: "Tainted command injection — user input flows to shell execution without sanitization"
+    languages: [python]
+    metadata:
+      category: command_injection
+      severity_level: critical
+      confidence: high
+      fix: "Use subprocess with shell=False and explicit argument lists, or sanitize with shlex.quote()"
+
+    pattern-sources:
+      # MCP tool handler parameters
+      - pattern: arguments[$KEY]
+      - pattern: arguments.get($KEY)
+      # Web framework inputs
+      - pattern: request.args.get(...)
+      - pattern: request.form[...]
+      - pattern: request.json[...]
+      - pattern: request.data
+      # CLI inputs
+      - pattern: sys.argv
+      - pattern: input(...)
+      # Generic function params in @tool decorated functions
+      - patterns:
+          - pattern: |
+              @$DECORATOR
+              def $FUNC(..., $PARAM: str, ...):
+                  ...
+          - metavariable-regex:
+              metavariable: $DECORATOR
+              regex: "(mcp|server|app)\\.tool|tool"
+          - focus-metavariable: $PARAM
+
+    pattern-sinks:
+      - pattern: os.system(...)
+      - pattern: os.popen(...)
+      - pattern: subprocess.call(..., shell=True, ...)
+      - pattern: subprocess.run(..., shell=True, ...)
+      - pattern: subprocess.Popen(..., shell=True, ...)
+      - pattern: subprocess.check_output(..., shell=True, ...)
+
+    pattern-sanitizers:
+      - pattern: shlex.quote(...)
+      - pattern: shlex.split(...)
+      - pattern: int(...)
+      - pattern: str(int(...))
+
+  - id: mcp-async-command-injection-taint
+    mode: taint
+    severity: ERROR
+    message: "Tainted async command injection — user input flows to async shell execution"
+    languages: [python]
+    metadata:
+      category: async_shell_injection
+      severity_level: critical
+      confidence: high
+      fix: "Use asyncio.create_subprocess_exec with explicit argument lists"
+
+    pattern-sources:
+      - pattern: arguments[$KEY]
+      - pattern: arguments.get($KEY)
+      - pattern: request.args.get(...)
+      - pattern: request.form[...]
+
+    pattern-sinks:
+      - pattern: asyncio.create_subprocess_shell(...)
+
+    pattern-sanitizers:
+      - pattern: shlex.quote(...)

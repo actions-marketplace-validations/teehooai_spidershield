@@ -1,0 +1,37 @@
+rules:
+  # Taint rule: tracks user input → eval/exec
+  # Only flags when untrusted data reaches code execution
+
+  - id: mcp-eval-injection-taint
+    mode: taint
+    severity: ERROR
+    message: "Tainted eval injection — user input flows to eval()/exec() enabling remote code execution"
+    languages: [python]
+    metadata:
+      category: dangerous_eval
+      severity_level: critical
+      confidence: high
+      fix: "Use json.loads() for JSON parsing, ast.literal_eval() for safe Python literal evaluation"
+
+    pattern-sources:
+      - pattern: arguments[$KEY]
+      - pattern: arguments.get($KEY)
+      - pattern: request.args.get(...)
+      - pattern: request.form[...]
+      - pattern: request.json[...]
+      - pattern: request.data
+      - pattern: sys.argv
+      - pattern: input(...)
+
+    pattern-sinks:
+      - pattern: eval(...)
+      - pattern: exec(...)
+      - pattern: compile(...)
+
+    pattern-sanitizers:
+      # Safe alternatives
+      - pattern: ast.literal_eval(...)
+      - pattern: json.loads(...)
+      - pattern: json.load(...)
+      - pattern: int(...)
+      - pattern: float(...)

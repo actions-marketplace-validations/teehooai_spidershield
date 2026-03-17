@@ -1,0 +1,43 @@
+rules:
+  # Taint rule: tracks user input → file operations without path validation
+  # Only flags when untrusted path reaches file I/O without resolve()/is_relative_to()
+
+  - id: mcp-path-traversal-taint
+    mode: taint
+    severity: ERROR
+    message: "Tainted path traversal — user-controlled path flows to file operation without validation"
+    languages: [python]
+    metadata:
+      category: path_traversal
+      severity_level: high
+      confidence: high
+      fix: "Resolve paths with Path.resolve() and verify with is_relative_to(base_dir)"
+
+    pattern-sources:
+      - pattern: arguments[$KEY]
+      - pattern: arguments.get($KEY)
+      - pattern: request.args.get(...)
+      - pattern: request.form[...]
+      - pattern: request.json[...]
+      - pattern: sys.argv
+
+    pattern-sinks:
+      - pattern: open(...)
+      - pattern: Path(...).read_text(...)
+      - pattern: Path(...).read_bytes(...)
+      - pattern: Path(...).write_text(...)
+      - pattern: Path(...).write_bytes(...)
+      - pattern: Path(...).open(...)
+      - pattern: Path(...).unlink(...)
+      - pattern: os.remove(...)
+      - pattern: os.unlink(...)
+      - pattern: shutil.rmtree(...)
+
+    pattern-sanitizers:
+      # Path resolution + boundary check
+      - pattern: $PATH.resolve()
+      - pattern: $PATH.is_relative_to(...)
+      - pattern: os.path.abspath(...)
+      - pattern: os.path.realpath(...)
+      # Allowlist check
+      - pattern: $PATH.startswith(...)

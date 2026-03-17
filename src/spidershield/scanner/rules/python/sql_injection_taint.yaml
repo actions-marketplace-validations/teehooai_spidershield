@@ -1,0 +1,41 @@
+rules:
+  # Taint rule: tracks user input → SQL execution via f-string/concatenation
+  # Key: parameterized queries (execute(sql, params)) are NOT flagged
+
+  - id: mcp-sql-injection-taint
+    mode: taint
+    severity: ERROR
+    message: "Tainted SQL injection — user input flows to SQL query without parameterization"
+    languages: [python]
+    metadata:
+      category: sql_injection
+      severity_level: critical
+      confidence: high
+      fix: "Use parameterized queries: cursor.execute('SELECT * FROM t WHERE id = ?', (user_id,))"
+
+    pattern-sources:
+      - pattern: arguments[$KEY]
+      - pattern: arguments.get($KEY)
+      - pattern: request.args.get(...)
+      - pattern: request.form[...]
+      - pattern: request.json[...]
+      - pattern: request.data
+
+    pattern-sinks:
+      # f-string SQL
+      - pattern: $DB.execute(f"...", ...)
+      - pattern: $DB.execute(f'...', ...)
+      # String concatenation SQL
+      - pattern: $DB.execute($A + $B, ...)
+      # %-format SQL
+      - pattern: $DB.execute($Q % $ARGS, ...)
+
+    pattern-sanitizers:
+      # Parameterized queries are safe
+      - pattern: $DB.execute($SQL, $PARAMS)
+      # ORM usage is safe
+      - pattern: $MODEL.objects.filter(...)
+      - pattern: $MODEL.objects.get(...)
+      # Integer casting
+      - pattern: int(...)
+      - pattern: str(int(...))

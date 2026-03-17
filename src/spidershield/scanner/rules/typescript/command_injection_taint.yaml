@@ -1,0 +1,42 @@
+rules:
+  # Taint: user/LLM input → child_process execution
+  - id: mcp-ts-command-injection-taint
+    mode: taint
+    severity: ERROR
+    message: "Tainted command injection — user input flows to shell execution"
+    languages: [typescript, javascript]
+    metadata:
+      category: child_process_injection
+      severity_level: critical
+      confidence: high
+      fix: "Use child_process.execFile or spawn with explicit argument arrays"
+
+    pattern-sources:
+      # MCP tool call arguments
+      - pattern: $ARGS.command
+      - pattern: $ARGS.input
+      - pattern: $ARGS[$KEY]
+      # Express/HTTP inputs
+      - pattern: req.params[...]
+      - pattern: req.query[...]
+      - pattern: req.body[...]
+      - pattern: req.params.$PROP
+      - pattern: req.query.$PROP
+      - pattern: req.body.$PROP
+      # Process args
+      - pattern: process.argv
+
+    pattern-sinks:
+      - pattern: child_process.exec(...)
+      - pattern: child_process.execSync(...)
+      - pattern: execSync(...)
+      - pattern: exec(...)
+
+    pattern-sanitizers:
+      # Safe execution (no shell)
+      - pattern: child_process.execFile(...)
+      - pattern: child_process.spawn(...)
+      - pattern: execFileSync(...)
+      - pattern: spawnSync(...)
+      - pattern: parseInt(...)
+      - pattern: Number(...)

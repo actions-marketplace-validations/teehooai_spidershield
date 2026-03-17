@@ -72,6 +72,8 @@ SEMGREP_COVERED_CATEGORIES: frozenset[str] = frozenset(
         "dangerous_eval",
         "command_injection",
         "sql_injection",
+        "async_shell_injection",
+        "path_traversal",
         "ts_unsafe_eval",
         "child_process_injection",
         "ts_sql_injection",
@@ -200,6 +202,14 @@ def _rule_id_to_category(rule_id: str) -> str:
         "mcp-ts-exec-sync-variable": "child_process_injection",
         "mcp-ts-query-template-literal": "ts_sql_injection",
         "mcp-ts-execute-template-literal": "ts_sql_injection",
+        # Taint rules (higher confidence — source-to-sink verified)
+        "mcp-command-injection-taint": "command_injection",
+        "mcp-async-command-injection-taint": "async_shell_injection",
+        "mcp-sql-injection-taint": "sql_injection",
+        "mcp-eval-injection-taint": "dangerous_eval",
+        "mcp-path-traversal-taint": "path_traversal",
+        "mcp-ts-command-injection-taint": "child_process_injection",
+        "mcp-ts-sql-injection-taint": "ts_sql_injection",
     }
     return mapping.get(rule_id, "")
 

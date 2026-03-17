@@ -1,0 +1,32 @@
+rules:
+  # Taint: user input → SQL template literal
+  - id: mcp-ts-sql-injection-taint
+    mode: taint
+    severity: ERROR
+    message: "Tainted SQL injection — user input flows to SQL query via template literal"
+    languages: [typescript, javascript]
+    metadata:
+      category: ts_sql_injection
+      severity_level: critical
+      confidence: high
+      fix: "Use parameterized queries ($1, $2) instead of template literal interpolation"
+
+    pattern-sources:
+      - pattern: req.params[...]
+      - pattern: req.query[...]
+      - pattern: req.body[...]
+      - pattern: req.params.$PROP
+      - pattern: req.query.$PROP
+      - pattern: req.body.$PROP
+      - pattern: $ARGS.query
+      - pattern: $ARGS.table
+      - pattern: $ARGS.input
+
+    pattern-sinks:
+      - pattern: $DB.query(`...${...}...`)
+      - pattern: $DB.execute(`...${...}...`)
+
+    pattern-sanitizers:
+      - pattern: parseInt(...)
+      - pattern: Number(...)
+      - pattern: $DB.escape(...)
