@@ -1,6 +1,9 @@
 rules:
   - id: mcp-sql-execute-fstring
-    pattern: $DB.execute(f"...", ...)
+    patterns:
+      - pattern: $DB.execute(f"...", ...)
+      # Exclude parameterized queries that build placeholders dynamically
+      - pattern-not: $DB.execute(f"...", $PARAMS)
     message: SQL injection — .execute() called with f-string (user input may reach query)
     severity: ERROR
     languages: [python]
@@ -10,7 +13,9 @@ rules:
       fix: "Use parameterized queries with placeholder syntax (?, %s, :name)"
 
   - id: mcp-sql-execute-fstring-single
-    pattern: $DB.execute(f'...', ...)
+    patterns:
+      - pattern: $DB.execute(f'...', ...)
+      - pattern-not: $DB.execute(f'...', $PARAMS)
     message: SQL injection — .execute() called with f-string (user input may reach query)
     severity: ERROR
     languages: [python]
