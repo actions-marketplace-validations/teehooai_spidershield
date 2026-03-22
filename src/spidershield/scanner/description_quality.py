@@ -559,11 +559,164 @@ def _extract_rust_tools(path: Path, tools: list[dict], seen: set[str]) -> None:
             _add_tool(tools, seen, match.group(1), match.group(2).strip())
 
 
+def _extract_java_tools(path: Path, tools: list[dict], seen: set[str]) -> None:
+    """Extract tool definitions from Java/Kotlin MCP server code."""
+    for ext in (".java", ".kt", ".kts"):
+        for src_file in _iter_source_files(path, ext):
+            try:
+                content = src_file.read_text(errors="ignore")
+            except OSError:
+                continue
+
+            # @Tool(description = "...") or @McpTool(description = "...")
+            # followed by fun/public methodName(...)
+            for match in re.finditer(
+                r'@(?:Tool|McpTool)\s*\([^)]*?description\s*=\s*"([^"]+)"[^)]*\)'
+                r'\s*(?:public\s+|private\s+|protected\s+)?(?:suspend\s+)?(?:fun\s+|[\w<>\[\]]+\s+)(\w+)\s*\(',
+                content,
+                re.DOTALL,
+            ):
+                _add_tool(tools, seen, match.group(2), match.group(1).strip())
+
+            # Tool.builder().name("...").description("...")
+            for match in re.finditer(
+                r'Tool\.builder\(\)[\s\S]{0,200}?\.name\(\s*"([a-zA-Z_][\w-]*)"\s*\)'
+                r'[\s\S]{0,200}?\.description\(\s*"([^"]+)"',
+                content,
+            ):
+                _add_tool(tools, seen, match.group(1), match.group(2).strip())
+
+            # new Tool("name", "description", ...) or Tool("name", "description")
+            for match in re.finditer(
+                r'new\s+Tool\(\s*"([a-zA-Z_][\w-]*)"\s*,\s*"([^"]+)"',
+                content,
+            ):
+                _add_tool(tools, seen, match.group(1), match.group(2).strip())
+
+            # server.addTool("name", "description", handler) / registerTool
+            for match in re.finditer(
+                r'\.(?:addTool|registerTool)\(\s*"([a-zA-Z_][\w-]*)"\s*,\s*"([^"]+)"',
+                content,
+            ):
+                _add_tool(tools, seen, match.group(1), match.group(2).strip())
+
+            # ToolSpecification("name", "description", ...)
+            for match in re.finditer(
+                r'ToolSpecification\(\s*"([a-zA-Z_][\w-]*)"\s*,\s*"([^"]+)"',
+                content,
+            ):
+                _add_tool(tools, seen, match.group(1), match.group(2).strip())
+
+
+def _extract_php_tools(path: Path, tools: list[dict], seen: set[str]) -> None:
+    """Extract tool definitions from PHP MCP server code."""
+    for php_file in _iter_source_files(path, ".php"):
+        try:
+            content = php_file.read_text(errors="ignore")
+        except OSError:
+            continue
+
+        # #[Tool(name: 'tool_name', description: 'desc')]
+        for match in re.finditer(
+            r"#\[Tool\s*\([^)]*?name:\s*['\"]([a-zA-Z_][\w-]*)['\"]"
+            r"[^)]*?description:\s*['\"]([^'\"]+)['\"]",
+            content,
+        ):
+            _add_tool(tools, seen, match.group(1), match.group(2).strip())
+
+        # $server->registerTool('name', 'description', ...) / addTool
+        for match in re.finditer(
+            r"->(?:registerTool|addTool)\(\s*['\"]([a-zA-Z_][\w-]*)['\"]"
+            r"\s*,\s*['\"]([^'\"]+)['\"]",
+            content,
+        ):
+            _add_tool(tools, seen, match.group(1), match.group(2).strip())
+
+        # new Tool('name', 'description') or Tool::create('name', 'description')
+        for match in re.finditer(
+            r"(?:new\s+Tool|Tool::(?:create|make))\(\s*['\"]([a-zA-Z_][\w-]*)['\"]"
+            r"\s*,\s*['\"]([^'\"]+)['\"]",
+            content,
+        ):
+            _add_tool(tools, seen, match.group(1), match.group(2).strip())
+
+        # ToolDefinition::fromName('name')->description('desc')
+        for match in re.finditer(
+            r"ToolDefinition::fromName\(\s*['\"]([a-zA-Z_][\w-]*)['\"]"
+            r"[\s\S]{0,200}?->description\(\s*['\"]([^'\"]+)['\"]",
+            content,
+        ):
+            _add_tool(tools, seen, match.group(1), match.group(2).strip())
+
+
+def _extract_ruby_tools(path: Path, tools: list[dict], seen: set[str]) -> None:
+    """Extract tool definitions from Ruby MCP server code."""
+    for rb_file in _iter_source_files(path, ".rb"):
+        try:
+            content = rb_file.read_text(errors="ignore")
+        except OSError:
+            continue
+
+        # tool "name", description: "desc"
+        for match in re.finditer(
+            r'tool\s+["\']([a-zA-Z_][\w-]*)["\']'
+            r'\s*,\s*description:\s*["\']([^"\']+)["\']',
+            content,
+        ):
+            _add_tool(tools, seen, match.group(1), match.group(2).strip())
+
+        # register_tool("name", "description")
+        for match in re.finditer(
+            r'register_tool\(\s*["\']([a-zA-Z_][\w-]*)["\']'
+            r'\s*,\s*["\']([^"\']+)["\']',
+            content,
+        ):
+            _add_tool(tools, seen, match.group(1), match.group(2).strip())
+
+        # name: "tool_name", description: "desc" (hash style)
+        for match in re.finditer(
+            r'name:\s*["\']([a-zA-Z_][\w-]*)["\']'
+            r'\s*,\s*description:\s*["\']([^"\']+)["\']',
+            content,
+        ):
+            _add_tool(tools, seen, match.group(1), match.group(2).strip())
+
+
+def _extract_csharp_tools(path: Path, tools: list[dict], seen: set[str]) -> None:
+    """Extract tool definitions from C#/.NET MCP server code."""
+    for cs_file in _iter_source_files(path, ".cs"):
+        try:
+            content = cs_file.read_text(errors="ignore")
+        except OSError:
+            continue
+
+        # [McpTool(Name = "name", Description = "desc")] or [Tool(...)]
+        for match in re.finditer(
+            r'\[(?:McpTool|Tool)\s*\([^)]*?(?:Name\s*=\s*"([a-zA-Z_][\w-]*)")[^)]*'
+            r'(?:Description\s*=\s*"([^"]+)")',
+            content,
+        ):
+            name = match.group(1) or ""
+            desc = match.group(2) or ""
+            if name and desc:
+                _add_tool(tools, seen, name, desc.strip())
+
+        # [Description("desc")] followed by public ... MethodName(
+        for match in re.finditer(
+            r'\[Description\("([^"]+)"\)\]\s*'
+            r'(?:\[[\w\(\)\"=,\s]*\]\s*)*'
+            r'public\s+\w+\s+(\w+)\s*\(',
+            content,
+        ):
+            _add_tool(tools, seen, match.group(2), match.group(1).strip())
+
+
 def _extract_tools(path: Path) -> list[dict]:
     """Extract tool definitions from an MCP server codebase.
 
-    Orchestrates per-language extractors (Python, TypeScript, Go, Rust)
-    with a README fallback if no tools are found via code parsing.
+    Orchestrates per-language extractors (Python, TypeScript, Go, Rust,
+    Java, Kotlin, PHP, Ruby, C#) with a README fallback if no tools are
+    found via code parsing.
     """
     tools: list[dict] = []
     seen: set[str] = set()
@@ -572,6 +725,10 @@ def _extract_tools(path: Path) -> list[dict]:
     _extract_ts_tools(path, tools, seen)
     _extract_go_tools(path, tools, seen)
     _extract_rust_tools(path, tools, seen)
+    _extract_java_tools(path, tools, seen)
+    _extract_php_tools(path, tools, seen)
+    _extract_ruby_tools(path, tools, seen)
+    _extract_csharp_tools(path, tools, seen)
 
     # Fallback: if no tools found via code parsing, try README extraction
     if not tools:
