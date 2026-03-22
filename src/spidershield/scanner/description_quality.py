@@ -333,6 +333,19 @@ def _extract_python_tools(path: Path, tools: list[dict], seen: set[str]) -> None
             desc = (match.group(2) or match.group(3) or "").strip()
             _add_tool(tools, seen, match.group(1), desc)
 
+        # MCP SDK positional style: types.Tool("name", "description") or Tool("name", description="...")
+        for match in re.finditer(
+            r'(?:types\.)?Tool\(\s*["\']([a-zA-Z_][\w-]*)["\']'
+            r'\s*,\s*(?:description\s*=\s*)?(?:"""(.*?)"""|"([^"]*(?:"\s*\n\s*"[^"]*)*)")',
+            content,
+            re.DOTALL,
+        ):
+            desc = (match.group(2) or match.group(3) or "").strip()
+            # Clean up multi-line string concatenation: "line1"\n"line2" → "line1 line2"
+            desc = re.sub(r'"\s*\n\s*"', " ", desc)
+            if desc:
+                _add_tool(tools, seen, match.group(1), desc)
+
         # MCP SDK style with enum: Tool(name=GitTools.STATUS, ...)
         enum_values = dict(re.findall(r'(\w+)\s*=\s*["\'](\w+)["\']', content))
         for match in re.finditer(
