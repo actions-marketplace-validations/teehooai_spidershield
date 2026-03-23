@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from enum import StrEnum
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -26,14 +27,14 @@ class SecurityIssue(BaseModel):
     line: int | None = None
     description: str
     fix_suggestion: str | None = None
-    file_context: str = Field(
-        default="runtime",
-        description="File context: runtime / test / build / benchmark / ctf / migration / platform / cli",
-    )
-    confidence: str = Field(
-        default="medium",
-        description="Confidence: high (tainted input→sink confirmed) / medium (dangerous call, source unclear) / low (pattern match only)",
-    )
+    # L2: file context — helps downstream filters distinguish runtime code from
+    # build scripts, CLI tooling, benchmark harnesses, and CTF/intentionally-
+    # vulnerable projects.  Defaults to "runtime" (conservative / no filtering).
+    file_context: Literal["runtime", "build", "test", "cli", "benchmark", "ctf"] = "runtime"
+    # L3: detection confidence — "high" for AST-level (Semgrep) findings,
+    # "medium" for regex-only matches, "low" for known-safe-pattern matches.
+    # Downstream tools (bug_hunter L3 filter) skip "low" confidence issues.
+    confidence: Literal["high", "medium", "low"] = "medium"
 
 
 class ToolDescriptionScore(BaseModel):
