@@ -23,6 +23,21 @@ import { TrustScoreClient } from "./trust-client.js";
 import { DLPScanner } from "./dlp.js";
 import { AuditLogger } from "./audit.js";
 import { PolicyClient } from "./policy-client.js";
+import { runInit, runUninstall } from "./init.js";
+
+// ── Parse CLI args ────────────────────────────────────────────────
+
+const args = process.argv.slice(2);
+
+// Handle subcommands
+if (args[0] === "init") {
+  runInit();
+  process.exit(0);
+}
+if (args[0] === "uninstall") {
+  runUninstall();
+  process.exit(0);
+}
 
 const API_URL =
   process.env.SPIDERSHIELD_API_URL ||
@@ -33,9 +48,6 @@ const POLICY_MODE = (process.env.SPIDERSHIELD_POLICY || "balanced") as
   | "audit-only";
 const API_KEY = process.env.SPIDERSHIELD_API_KEY;
 
-// ── Parse CLI args ────────────────────────────────────────────────
-
-const args = process.argv.slice(2);
 const dashDash = args.indexOf("--");
 const serverArgs = dashDash >= 0 ? args.slice(dashDash + 1) : args;
 
@@ -44,11 +56,14 @@ if (serverArgs.length === 0) {
 SpiderShield MCP Proxy v0.1.0
 
 Usage:
-  npx spidershield-proxy <mcp-server-command> [args...]
+  spidershield-proxy init                      Auto-protect all MCP servers
+  spidershield-proxy uninstall                 Restore original configs
+  spidershield-proxy <server-command> [args]   Proxy a single server
 
 Examples:
-  npx spidershield-proxy npx @modelcontextprotocol/server-github
-  npx spidershield-proxy -- node my-server.js --port 3000
+  spidershield-proxy init
+  spidershield-proxy npx @modelcontextprotocol/server-github
+  spidershield-proxy -- node my-server.js --port 3000
 
 Environment variables:
   SPIDERSHIELD_POLICY    balanced (default) | strict | audit-only
