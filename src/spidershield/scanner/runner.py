@@ -305,4 +305,19 @@ def _print_table(report: ScanReport):
         for rec in report.recommendations:
             console.print(f"  > {rec}")
 
+    # --- Growth: link to full report + star + API key ---
+    _slug = report.target.replace("\\", "/").rstrip("/")
+    # Try to extract owner/repo from target path or URL
+    _parts = _slug.split("/")
+    if len(_parts) >= 2:
+        _owner_repo = f"{_parts[-2]}/{_parts[-1]}"
+        _report_url = f"https://spiderrating.com/servers/{_owner_repo}"
+    else:
+        _report_url = "https://spiderrating.com"
+
+    console.print()
+    console.print("[dim]─────────────────────────────────────────────────[/dim]")
+    console.print(f"  [bold]Full report:[/bold] {_report_url}")
+    console.print(f"  [bold]Real-time protection:[/bold] https://spiderrating.com/account [dim](free API key)[/dim]")
+    console.print(f"  [bold]Star us:[/bold] https://github.com/teehooai/spidershield")
     console.print()
