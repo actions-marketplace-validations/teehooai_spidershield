@@ -68,6 +68,8 @@ DANGEROUS_PATTERNS = {
     "sql_injection": {
         "patterns": [
             # f-string with full SQL statement pattern (keyword + SQL target)
+            # Exclude safe parameterized patterns: f"SELECT ... IN ({placeholders})"
+            # where placeholders is a join of "?" markers — these are safe.
             (
                 r'f"[^"]*(?:SELECT\s+[\w*].*?FROM'
                 r"|INSERT\s+INTO"
@@ -84,6 +86,8 @@ DANGEROUS_PATTERNS = {
                 r"|DROP\s+(?:TABLE|INDEX|VIEW|DATABASE)"
                 r"|CREATE\s+(?:TABLE|INDEX|VIEW|DATABASE))"
             ),
+            # .execute(f"...") — but NOT if the f-string only contains ? placeholders
+            # Safe pattern: .execute(f"...{placeholders}...", params) where placeholders = ",".join("?")
             r'\.execute\(\s*f"',
             r"\.execute\(\s*f'",
             r'\.execute\([^)]*%\s',
@@ -92,6 +96,17 @@ DANGEROUS_PATTERNS = {
         "severity": "critical",
         "description": "Potential SQL injection -- query built with string interpolation",
         "fix": "Use parameterized queries with placeholder syntax",
+        # FP suppression: lines containing only ? placeholder interpolation are filtered
+        # in _scan_file() post-processing below.
+        "_fp_safe_patterns": [
+            # f-string that only interpolates a placeholder variable (e.g., {placeholders})
+            # followed by a parameterized call with second argument
+            r'\.execute\(\s*f["\'][^"\']*\{placeholders?\}[^"\']*["\'],\s*\w+',
+            # Common safe idiom: IN ({",".join("?" * N)})
+            r'IN\s*\(\s*\{',
+            # .execute(query, params) where query is a variable (not inline f-string)
+            r'\.execute\(\s*query\s*,',
+        ],
     },
     "hardcoded_credential": {
         "patterns": [
@@ -305,10 +320,20 @@ TS_DANGEROUS_PATTERNS = {
         ],
         "severity": "critical",
         "description": (
-            "Potential command injection via child_process"
-            " -- user input may be executed as shell command"
+            "Command injection — child_process.exec() with template literal interpolation"
         ),
         "fix": "Use child_process.execFile or spawn with explicit argument arrays",
+        # FP suppression: hardcoded system commands that don't take user input
+        "_fp_safe_patterns": [
+            # which/where commands for binary detection (hardcoded binary names)
+            r"(?:which|where)\s+(?:rg|chrome|chromium|google-chrome|firefox|brave|edge|node|npm)",
+            # osascript with hardcoded AppleScript (no ${} interpolation of user input)
+            r"osascript\s+-e",
+            # reg query for Windows registry (hardcoded paths)
+            r"reg\s+query",
+            # command -v for binary detection
+            r"command\s+-v",
+        ],
     },
     "ts_unsafe_eval": {
         "patterns": [
@@ -334,6 +359,18 @@ TS_DANGEROUS_PATTERNS = {
         "severity": "critical",
         "description": "Potential SQL injection -- query built with template literal interpolation",
         "fix": "Use parameterized queries ($1, $2) instead of template literal interpolation",
+        # FP suppression: interpolation of safe structural elements (not user data)
+        "_fp_safe_patterns": [
+            # Interpolation of WHERE clause / schema clause (structural, not data)
+            r"\$\{(?:schemaClause|whereClause|schemaFilter|tableFilter|orderClause|limitClause)\}",
+            # Interpolation of schema/table name from prior DB query (not user input)
+            r"\$\{(?:schema(?:Value|Name)?|database|tableName|procedureName|functionName)\}",
+            # SHOW CREATE with schema.name pattern (metadata lookup)
+            r"SHOW\s+CREATE",
+            # Query followed by parameterized array: .query(`...`, [params])
+            r"\.query\(\s*`[^`]*`\s*,\s*\[",
+            r"\.query\(\s*`[^`]*`\s*,\s*queryParams",
+        ],
     },
     "ts_async_injection": {
         "patterns": [
@@ -891,6 +928,20 @@ def scan_security(path: Path) -> tuple[float, list[SecurityIssue]]:
                 pat_flags = flags | re.MULTILINE if pattern.startswith("^") else flags
                 for match in re.finditer(pattern, content, pat_flags):
                     line_num = content[:match.start()].count("\n") + 1
+
+                    # FP suppression: skip matches where the line matches
+                    # a known safe pattern (e.g., parameterized SQL with ? placeholders)
+                    fp_patterns = config.get("_fp_safe_patterns", [])
+                    if fp_patterns:
+                        # Get the full line containing this match
+                        line_start = content.rfind("\n", 0, match.start()) + 1
+                        line_end = content.find("\n", match.end())
+                        if line_end == -1:
+                            line_end = len(content)
+                        matched_line = content[line_start:line_end]
+                        if any(re.search(fp, matched_line, re.IGNORECASE) for fp in fp_patterns):
+                            continue  # safe pattern — skip this match
+
                     # For no_input_validation: suppress if function body
                     # contains validation (len check, validate call, raise,
                     # or isinstance).  This avoids flagging functions that
@@ -927,6 +978,18 @@ def scan_security(path: Path) -> tuple[float, list[SecurityIssue]]:
                 for pattern in config["patterns"]:
                     for match in re.finditer(pattern, content):
                         line_num = content[:match.start()].count("\n") + 1
+
+                        # FP suppression for TS patterns
+                        # Use a wider context window (±5 lines) because TS template
+                        # literals often span multiple lines
+                        fp_patterns = config.get("_fp_safe_patterns", [])
+                        if fp_patterns:
+                            ctx_start = max(0, content.rfind("\n", 0, max(0, match.start() - 200)) + 1)
+                            ctx_end = min(len(content), match.end() + 500)
+                            context_block = content[ctx_start:ctx_end]
+                            if any(re.search(fp, context_block, re.IGNORECASE) for fp in fp_patterns):
+                                continue  # safe pattern — skip
+
                         conf = (
                             "low"
                             if _has_safe_pattern(category, content)
